@@ -375,7 +375,6 @@ class PieceOfCakeGame:
 
     # Verify the action returned by the player
     def check_action(self, action):
-        print(action)
         print("Checking action: ", action)
         if action is None:
             print("No action returned")
