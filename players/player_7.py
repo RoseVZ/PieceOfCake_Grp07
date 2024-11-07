@@ -70,21 +70,23 @@ class Player:
         best_penalty = float('inf')
         
         # Try different numbers of horizontal cuts (e.g., 0, 1, 2, 3)
-        for num_hor_cuts in range(4):
-            # Generate vertical cuts based on requests and grouping ratio
-            vertical_cuts = self.generate_vertical_cuts(requests, num_cuts="original") # Preserving vertical grouping ratios
-            
-            # Inject the specified number of horizontal cuts
-            cut_coords = inject_crumb_coords(vertical_cuts, self.cake_len, self.cake_width)
-            cut_coords = inject_horizontal_cuts(cut_coords, self.cake_len, self.cake_width)
+        num_hor_cuts = 0
+        num_hor_cuts =len(self.requests)//25
+        print('Trying', num_hor_cuts, 'horizontal cuts')
+        # Generate vertical cuts based on requests and grouping ratio
+        vertical_cuts = self.generate_vertical_cuts(requests, num_cuts="original") # Preserving vertical grouping ratios
+        
+        # Inject the specified number of horizontal cuts
+        cut_coords = inject_crumb_coords(vertical_cuts, self.cake_len, self.cake_width)
+        cut_coords = inject_horizontal_cuts(cut_coords, self.cake_len, self.cake_width,num_hor_cuts)
 
-            # Compute assignment and penalty for this configuration
-            penalty = self._calculate_penalty(lambda polys, reqs: self.assign_pieces(reqs, polys))
-            print("penalty",num_hor_cuts, penalty)
-            # Update best configuration if this one has a lower penalty
-            if penalty < best_penalty:
-                best_penalty = penalty
-                best_cut_config = (num_hor_cuts, cut_coords)
+        # Compute assignment and penalty for this configuration
+        penalty = self._calculate_penalty(lambda polys, reqs: self.assign_pieces(reqs, polys))
+        print("penalty",num_hor_cuts, penalty)
+        # Update best configuration if this one has a lower penalty
+        if penalty < best_penalty:
+            best_penalty = penalty
+            best_cut_config = (num_hor_cuts, cut_coords)
         
         # Use the best configuration’s cuts
         best_num_hor_cuts, best_cut_coords = best_cut_config
@@ -194,7 +196,7 @@ def get_crumb_coord(cut, cake_len, cake_width):
     y = round(cake_len - knife_error, 2) if cut[1] == cake_len else knife_error
     return [x, y]
 
-def inject_horizontal_cuts(vertical_cuts, cake_len, cake_width, num_hor_cuts=3):
+def inject_horizontal_cuts(vertical_cuts, cake_len, cake_width, num_hor_cuts):
     """Injects a specified number of horizontal cuts into the cake."""
     horizontal_cuts = []
     for i in range(num_hor_cuts):
