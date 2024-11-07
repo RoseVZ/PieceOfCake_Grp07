@@ -1,6 +1,7 @@
 from typing import List, Tuple, Callable
 from sklearn.mixture import GaussianMixture
 import numpy as np
+import math
 
 import logging
 import constants
@@ -71,7 +72,7 @@ class Player:
         
         # Try different numbers of horizontal cuts (e.g., 0, 1, 2, 3)
         num_hor_cuts = 0
-        num_hor_cuts =len(self.requests)//25
+        num_hor_cuts = math.ceil(self.cake_len//25)
         print('Trying', num_hor_cuts, 'horizontal cuts')
         # Generate vertical cuts based on requests and grouping ratio
         vertical_cuts = self.generate_vertical_cuts(requests, num_cuts="original") # Preserving vertical grouping ratios
@@ -97,11 +98,17 @@ class Player:
         if turn_number < len(best_cut_coords) + 1:
             return constants.CUT, best_cut_coords[turn_number - 1]
         
+        # areas =[i.area for i in polygons]
+        # assignment = sorted(range(len(areas)), key=lambda x: areas[x], reverse=True)
+        # print(assignment[:len(requests)])
+        # return constants.ASSIGN, assignment[:len(requests)][::-1]
+
         assignment = self.assign_pieces(requests, polygons)
         return constants.ASSIGN, assignment
     
     def assign_pieces(self, requests: List[float], polygons: List[float]) -> List[int]:
         """Assign each request to the polygon with the closest area, minimizing the sum of differences."""
+        
         assignment = [-1] * len(requests)
         
         requests_sorted = sorted(enumerate(requests), key=lambda x: x[1])
@@ -198,9 +205,17 @@ def get_crumb_coord(cut, cake_len, cake_width):
 
 def inject_horizontal_cuts(vertical_cuts, cake_len, cake_width, num_hor_cuts):
     """Injects a specified number of horizontal cuts into the cake."""
+
+    print(num_hor_cuts)
     horizontal_cuts = []
+    cake_width = round(cake_width, 2)
+    total_y = 0
     for i in range(num_hor_cuts):
-        y = round((cake_len / (num_hor_cuts + 1)) * (i + 1), 2)
-        horizontal_cuts.extend([ [cake_width, y],[0, y],[0.01, 0], [0, 0.01]])
+        total_y = round((cake_len / (num_hor_cuts + 1)) * (i + 1), 2)
+        horizontal_cuts.extend([ [0, total_y], [cake_width, total_y], [0, round(total_y+0.01, 2)], [0.01*(i+1), 0]])
+
+    print(cake_len, cake_width)
+
+    print(horizontal_cuts)
 
     return horizontal_cuts + vertical_cuts
