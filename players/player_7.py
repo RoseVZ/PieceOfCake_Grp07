@@ -23,6 +23,9 @@ class Player:
         self.tolerance = tolerance
         self.cake_len = None
         self.cake_width = None
+        self.cut_coords = None
+        self.splits = 0
+        self.best_ratio = [float('inf'), -1]
 
     def can_cake_fit_in_plate(self, cake_piece, radius=12.5):
         cake_points = np.array(
@@ -64,39 +67,36 @@ class Player:
 
         self.polygons = polygons
         self.requests = requests
-
-        print('Turn', turn_number, '\n')
-        
-        best_cut_config = None
-        best_penalty = float('inf')
-        
-        # Try different numbers of horizontal cuts (e.g., 0, 1, 2, 3)
-        num_hor_cuts = 0
-        num_hor_cuts = math.ceil(self.cake_len//25)
-        print('Trying', num_hor_cuts, 'horizontal cuts')
-        # Generate vertical cuts based on requests and grouping ratio
-        vertical_cuts = self.generate_vertical_cuts(requests, num_cuts="original") # Preserving vertical grouping ratios
-        
-        # Inject the specified number of horizontal cuts
-        cut_coords = inject_crumb_coords(vertical_cuts, self.cake_len, self.cake_width)
-        cut_coords = inject_horizontal_cuts(cut_coords, self.cake_len, self.cake_width,num_hor_cuts)
-
+                
         # Compute assignment and penalty for this configuration
-        penalty = self._calculate_penalty(lambda polys, reqs: self.assign_pieces(reqs, polys))
-        print("penalty",num_hor_cuts, penalty)
-        # Update best configuration if this one has a lower penalty
-        if penalty < best_penalty:
-            best_penalty = penalty
-            best_cut_config = (num_hor_cuts, cut_coords)
+        # penalty = self._calculate_penalty(lambda polys, reqs: self.assign_pieces(reqs, polys))
+        # print("penalty",num_hor_cuts, penalty)
+        # # Update best configuration if this one has a lower penalty
+        # if penalty < best_penalty:
+        #     best_penalty = penalty
+        #    best_cut_config = (num_hor_cuts, cut_coords)
         
         # Use the best configuration’s cuts
-        best_num_hor_cuts, best_cut_coords = best_cut_config
-        print('Best configuration:', best_num_hor_cuts, 'horizontal cuts\n')
-        if turn_number == 1:
-            return constants.INIT, best_cut_coords[0]
+        # best_num_hor_cuts, best_cut_coords = best_cut_config
 
-        if turn_number < len(best_cut_coords) + 1:
-            return constants.CUT, best_cut_coords[turn_number - 1]
+        if turn_number == 1:
+                    # num_hor_cuts = 2
+            self.splits = calc_num_splits(requests, self.cake_len)
+
+            if self.splits >= 1:
+                # Generate vertical cuts based on requests and grouping ratio
+                vertical_cuts = self.generate_vertical_cuts(requests, num_cuts=self.splits) # Preserving vertical grouping ratios
+            else:
+                vertical_cuts = self.generate_vertical_cuts(requests, num_cuts=0, final=True) # Preserving vertical grouping ratios
+            
+            # Inject the specified number of horizontal cuts
+            self.cut_coords = inject_crumb_coords(vertical_cuts, self.cake_len, self.cake_width)
+            self.cut_coords = inject_horizontal_cuts(self.cut_coords, self.cake_len, self.cake_width, self.splits)
+
+            return constants.INIT, self.cut_coords[0]
+        
+        if turn_number < len(self.cut_coords) + 1:
+            return constants.CUT, self.cut_coords[turn_number - 1]
         
         # areas =[i.area for i in polygons]
         # assignment = sorted(range(len(areas)), key=lambda x: areas[x], reverse=True)
@@ -139,15 +139,14 @@ class Player:
 
         return assignment
 
-    def generate_vertical_cuts(self, requests, num_cuts="original"):
+    def generate_vertical_cuts(self, requests, num_cuts, final=False):
         """Generates vertical cuts with consistent ratio grouping for requests."""
         
         # Copy requests to avoid modifying the original list
         requests_copy = requests[:]
-        group_size = 4
+        group_size = num_cuts + 1
         #group_size = num_cuts + 1 if isinstance(num_cuts, int) else len(requests_copy) // 3
-        fakes = []
-        print("here", group_size)
+
         # Ensure the number of requests is a multiple of the group size
         if len(requests_copy) % group_size != 0:
             required_requests = group_size - (len(requests_copy) % group_size)
@@ -164,12 +163,26 @@ class Player:
   
         # Calculate average ratios for consistent group scaling
         avg_ratios = [sum(group[j + 1] / group[j] for group in groups if group[j] != 0) / len(groups) for j in range(group_size - 1)]
+
+        # bail on this split if it sucks
+        if not final:
+            ratio = max(avg_ratios) ** self.splits
+            if ratio > 1 + self.tolerance * 0.01:
+                if ratio < self.best_ratio[0]:
+                    self.best_ratio = [ratio, self.splits]
+
+                if self.splits < len(requests):
+                    self.splits += 1
+                    return self.generate_vertical_cuts(requests, self.splits)
+                else:
+                    self.splits = self.best_ratio[1]
+                    return self.generate_vertical_cuts(requests, self.splits, final=True)
         
         # Adjust groups to align with average ratios for consistency
         for group in groups:
             for j in range(group_size - 1):
                 group[j + 1] = group[j] * avg_ratios[j]
-        
+
         # Generate x-widths for vertical cuts based on adjusted groups
         x_widths = [sum(group) / self.cake_len for group in groups]
         x_widths.append(self.cake_width - sum(x_widths))
@@ -206,7 +219,6 @@ def get_crumb_coord(cut, cake_len, cake_width):
 def inject_horizontal_cuts(vertical_cuts, cake_len, cake_width, num_hor_cuts):
     """Injects a specified number of horizontal cuts into the cake."""
 
-    print(num_hor_cuts)
     horizontal_cuts = []
     cake_width = round(cake_width, 2)
     total_y = 0
@@ -214,8 +226,21 @@ def inject_horizontal_cuts(vertical_cuts, cake_len, cake_width, num_hor_cuts):
         total_y = round((cake_len / (num_hor_cuts + 1)) * (i + 1), 2)
         horizontal_cuts.extend([ [0, total_y], [cake_width, total_y], [0, round(total_y+0.01, 2)], [0.01*(i+1), 0]])
 
-    print(cake_len, cake_width)
-
-    print(horizontal_cuts)
+    horizontal_cuts.append([0, 0.01])
 
     return horizontal_cuts + vertical_cuts
+
+def calc_num_splits(requests, cake_len):
+    """Calculates the number of horizontal cuts based on the number of requests and the number of vertical cuts."""
+    largest_req = max(requests)
+
+    for i in range(50):
+        length = cake_len / (i + 1)
+        width = largest_req / length
+
+        diagonal = (length ** 2 + width ** 2) ** 0.5
+
+        if diagonal <= 25:
+            return i
+        
+    return 51
